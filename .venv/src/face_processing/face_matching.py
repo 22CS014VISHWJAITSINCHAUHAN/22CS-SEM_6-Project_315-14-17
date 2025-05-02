@@ -685,3 +685,242 @@ class FaceVerificationSystem:
         self.save_results(id_image, webcam_image, id_face_data, webcam_face_data, match, similarity)
 
         return match, similarity
+
+#
+# def main():
+#     # Initialize the system
+#     system = FaceVerificationSystem()
+#
+#     # Get ID card image path from user
+#     print("\nWelcome to the Face Verification System")
+#     id_image_path = input("Please enter the path to the ID card image: ")
+#
+#     # Run verification
+#     system.run_verification(id_image_path)
+#
+#
+# if __name__ == "__main__":
+#     main()
+#
+
+
+
+
+
+
+# # face_matching.py
+#
+# import cv2
+# import numpy as np
+# import os
+# import time
+# from datetime import datetime
+# import tensorflow as tf
+# import matplotlib.pyplot as plt
+# from sklearn.metrics.pairwise import cosine_similarity
+# import mediapipe as mp
+# import matplotlib
+# import warnings
+#
+# # Suppress warnings and configure backend
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# os.environ['KMP_WARNINGS'] = '0'
+# warnings.filterwarnings("ignore")
+# matplotlib.use('Agg')
+#
+#
+# class LivenessDetector:
+#     """MediaPipe-based liveness detection with eye blinks and head movement"""
+#
+#     def __init__(self):
+#         self.mp_face_mesh = mp.solutions.face_mesh.FaceMesh(
+#             max_num_faces=1,
+#             refine_landmarks=True,
+#             min_detection_confidence=0.5,
+#             min_tracking_confidence=0.5,
+#             static_image_mode=False
+#         )
+#
+#         # State management
+#         self.state = "WAITING"
+#         self.blink_count = 0
+#         self.blink_threshold = 2
+#         self.head_movement_detected = False
+#         self.nose_start_x = None
+#         self.max_movement = 0.0
+#         self.movement_threshold = 0.03
+#         self.movement_history = []
+#         self.ear_threshold = 0.22
+#         self.blink_flag = False
+#         self.last_blink_time = 0
+#
+#         self.instructions = {
+#             "WAITING": "Position your face in the frame",
+#             "BLINK": "Please blink twice",
+#             "HEAD_MOVEMENT": "Turn head left and right slowly",
+#             "COMPLETE": "Verification Complete!"
+#         }
+#
+#     def _calculate_ear(self, landmarks, eye_indices):
+#         p1 = landmarks.landmark[eye_indices[0]]
+#         p2 = landmarks.landmark[eye_indices[1]]
+#         p3 = landmarks.landmark[eye_indices[2]]
+#         p4 = landmarks.landmark[eye_indices[3]]
+#
+#         vertical_dist = abs(p1.y - p2.y)
+#         horizontal_dist = abs(p3.x - p4.x)
+#         return vertical_dist / horizontal_dist if horizontal_dist > 0.001 else 1.0
+#
+#     def _detect_eye_blink(self, landmarks):
+#         left_ear = self._calculate_ear(landmarks, [159, 145, 33, 133])
+#         right_ear = self._calculate_ear(landmarks, [386, 374, 362, 263])
+#         avg_ear = (left_ear + right_ear) / 2
+#
+#         current_time = time.time()
+#         if avg_ear < self.ear_threshold:
+#             if not self.blink_flag and (current_time - self.last_blink_time) > 0.3:
+#                 self.blink_flag = True
+#                 self.last_blink_time = current_time
+#                 return True
+#         else:
+#             self.blink_flag = False
+#         return False
+#
+#     def _detect_head_movement(self, landmarks):
+#         nose_x = landmarks.landmark[1].x
+#         left_eye_x = landmarks.landmark[33].x
+#         right_eye_x = landmarks.landmark[263].x
+#
+#         if self.nose_start_x is None:
+#             self.nose_start_x = nose_x
+#             self.left_eye_start_x = left_eye_x
+#             self.right_eye_start_x = right_eye_x
+#             return False
+#
+#         movement = max(
+#             abs(nose_x - self.nose_start_x),
+#             abs(left_eye_x - self.left_eye_start_x),
+#             abs(right_eye_x - self.right_eye_start_x)
+#         )
+#
+#         self.movement_history.append(movement)
+#         if len(self.movement_history) > 10:
+#             self.movement_history.pop(0)
+#
+#         if movement > self.max_movement:
+#             self.max_movement = movement
+#
+#         if movement > self.movement_threshold:
+#             self.head_movement_detected = True
+#             self.state = "COMPLETE"
+#             return True
+#
+#         return False
+#
+#     def process_frame(self, frame):
+#         if frame is None:
+#             return False, "ERROR", "Invalid frame received", None
+#
+#         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#         results = self.mp_face_mesh.process(rgb_frame)
+#
+#         if results.multi_face_landmarks:
+#             for face_landmarks in results.multi_face_landmarks:
+#                 success, state, message = self._handle_state(face_landmarks)
+#                 return success, state, message, self._get_face_bbox(face_landmarks)
+#
+#         return False, "DETECTING", "No face detected", None
+#
+#     def _get_face_bbox(self, landmarks):
+#         x_coords = [lm.x for lm in landmarks.landmark]
+#         y_coords = [lm.y for lm in landmarks.landmark]
+#         return (
+#             int(min(x_coords) * self.frame_width),
+#             int(min(y_coords) * self.frame_height),
+#             int(max(x_coords) * self.frame_width),
+#             int(max(y_coords) * self.frame_height)
+#         )
+#
+#     def _handle_state(self, landmarks):
+#         if self.state == "WAITING":
+#             self.state = "BLINK"
+#         elif self.state == "BLINK" and self._detect_eye_blink(landmarks):
+#             self.blink_count += 1
+#             if self.blink_count >= self.blink_threshold:
+#                 self.state = "HEAD_MOVEMENT"
+#                 self._reset_head_tracking()
+#         elif self.state == "HEAD_MOVEMENT" and self._detect_head_movement(landmarks):
+#             self.state = "COMPLETE"
+#
+#         return True, self.state, self.instructions[self.state]
+#
+#     def _reset_head_tracking(self):
+#         self.nose_start_x = None
+#         self.max_movement = 0.0
+#         self.movement_history = []
+#
+#     def reset(self):
+#         self.state = "WAITING"
+#         self.blink_count = 0
+#         self.head_movement_detected = False
+#         self._reset_head_tracking()
+#         self.blink_flag = False
+#         self.last_blink_time = 0
+#
+#
+# class FaceVerificationSystem:
+#     def __init__(self):
+#         print("Initializing Face Verification System...")
+#
+#         # Initialize face analyzer
+#         from insightface.app import FaceAnalysis
+#         self.face_analyzer = FaceAnalysis(providers=['CPUExecutionProvider'])
+#         self.face_analyzer.prepare(ctx_id=0, det_size=(640, 640))
+#
+#         # Initialize liveness detector
+#         self.liveness_detector = LivenessDetector()
+#         self.threshold = 0.45
+#
+#     def run_verification(self, id_image_path, webcam_image):
+#         # Load and process images
+#         id_image = cv2.cvtColor(cv2.imread(id_image_path), cv2.COLOR_BGR2RGB)
+#         id_face = self._extract_face(id_image)
+#         webcam_face = self._extract_face(webcam_image)
+#
+#         if not id_face or not webcam_face:
+#             return False, 0.0, None
+#
+#         # Compare faces
+#         match, similarity = self.verify_faces(id_face['embedding'], webcam_face['embedding'])
+#         result_paths = self._save_results(id_image, webcam_image, id_face, webcam_face, match, similarity)
+#
+#         return match, similarity, result_paths
+#
+#     def _extract_face(self, image):
+#         faces = self.face_analyzer.get(image)
+#         if not faces:
+#             return None
+#
+#         # Select largest face
+#         face = max(faces, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]))
+#
+#         # Extract face region
+#         bbox = face.bbox.astype(int)
+#         return {
+#             'embedding': face.embedding,
+#             'bbox': bbox,
+#             'face_image': image[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+#         }
+#
+#     def verify_faces(self, emb1, emb2):
+#         similarity = cosine_similarity([emb1], [emb2])[0][0]
+#         return similarity > self.threshold, similarity
+#
+#     def _save_results(self, id_image, webcam_image, id_face, webcam_face, match, similarity):
+#         try:
+#             plt.figure(figsize=(12, 8))
+#             # ... (rest of your save results logic)
+#             return result_paths
+#         except Exception as e:
+#             print(f"Error saving results: {e}")
+#             return None
